@@ -6,19 +6,15 @@ from PIL import Image, ImageTk
 import os
 
 
-# ==============================
-#   PARÂMETROS GERAIS
-# ==============================
-RATIO_TEST = 0.75              # teste de razão mais rígido
-MIN_MATCHES_RANSAC = 25        # exige mais matches pra confiar na homografia
-RANSAC_REPROJ_THRESH = 3.0     # tolerância menor no RANSAC
-MAX_MATCHES_FOR_H = 200        # máximo de matches usados pra estimar H
-MAX_LINES_TO_DRAW = 80         # máximo de linhas desenhadas na imagem final
+
+RATIO_TEST = 0.75              
+MIN_MATCHES_RANSAC = 25        
+RANSAC_REPROJ_THRESH = 3.0     
+MAX_MATCHES_FOR_H = 200        
+MAX_LINES_TO_DRAW = 80         
 
 
-# ==============================
-#   FUNÇÕES DE PROCESSAMENTO
-# ==============================
+
 
 def redimensionar_para_altura(img, target_h):
     """
@@ -49,7 +45,7 @@ def carregar_imagens(caminho_a, caminho_b):
         if img_a_color is None or img_b_color is None:
             raise IOError("Não foi possível carregar uma ou ambas as imagens.")
 
-        # mesma altura para minimizar área preta no drawMatches
+        
         hA, wA = img_a_color.shape[:2]
         hB, wB = img_b_color.shape[:2]
         altura_alvo = min(hA, hB)
@@ -57,7 +53,7 @@ def carregar_imagens(caminho_a, caminho_b):
         img_a_color = redimensionar_para_altura(img_a_color, altura_alvo)
         img_b_color = redimensionar_para_altura(img_b_color, altura_alvo)
 
-        # versões em cinza
+       
         img_a_gray = cv2.cvtColor(img_a_color, cv2.COLOR_BGR2GRAY)
         img_b_gray = cv2.cvtColor(img_b_color, cv2.COLOR_BGR2GRAY)
 
@@ -104,7 +100,7 @@ def filtrar_correspondencias(desc_a, desc_b, max_matches=MAX_MATCHES_FOR_H):
             if m.distance < RATIO_TEST * n.distance:
                 bons_matches.append(m)
 
-    # Ordena pelos melhores (menor distance) e limita quantidade
+   
     bons_matches = sorted(bons_matches, key=lambda m: m.distance)
     if len(bons_matches) > max_matches:
         bons_matches = bons_matches[:max_matches]
@@ -181,9 +177,7 @@ def salvar_resultados(img_linhas, img_linhas_simples, img_pontos,
         print("Erro ao salvar resultados:", e)
 
 
-# ==============================
-#   PIPELINE PRINCIPAL
-# ==============================
+
 
 def processar_comparacao(caminho_a, caminho_b):
     """
@@ -199,15 +193,15 @@ def processar_comparacao(caminho_a, caminho_b):
     if img_a_gray is None:
         return None
 
-    # 1) Detecta features nas duas imagens
+   
     kp_a, desc_a = extrair_features_orb(img_a_gray)
     kp_b, desc_b = extrair_features_orb(img_b_gray)
 
-    # Imagens com keypoints destacados individualmente
+    
     img_a_kp = desenhar_keypoints(img_a_color, kp_a)
     img_b_kp = desenhar_keypoints(img_b_color, kp_b)
 
-    # Se não achou descritores suficientes, só mostra os pontos
+    
     if desc_a is None or desc_b is None or len(kp_a) < 2 or len(kp_b) < 2:
         salvar_resultados(
             img_linhas=img_a_kp,
@@ -218,7 +212,7 @@ def processar_comparacao(caminho_a, caminho_b):
         )
         return img_a_kp
 
-    # 2) Matching entre descritores (já limitado e ordenado)
+    
     good_matches = filtrar_correspondencias(desc_a, desc_b)
 
     if len(good_matches) < MIN_MATCHES_RANSAC:
@@ -233,7 +227,7 @@ def processar_comparacao(caminho_a, caminho_b):
         salvar_resultados(img_matches_fracas, img_matches_fracas, canvas_pontos, img_a_kp, img_b_kp)
         return img_matches_fracas
 
-    # 3) Estima homografia e inliers
+    
     H, mask = estimar_homografia(kp_a, kp_b, good_matches)
 
     if H is None or mask is None:
@@ -263,16 +257,16 @@ def processar_comparacao(caminho_a, caminho_b):
         salvar_resultados(img_poucos_inliers, img_poucos_inliers, canvas_pontos, img_a_kp, img_b_kp)
         return img_poucos_inliers
 
-    # --- NOVO: ordenar inliers por distância e limitar quantos vamos desenhar ---
+    
     matches_inliers = sorted(matches_inliers, key=lambda m: m.distance)
     if len(matches_inliers) > MAX_LINES_TO_DRAW:
         matches_to_draw = matches_inliers[:MAX_LINES_TO_DRAW]
     else:
         matches_to_draw = matches_inliers
 
-    # 4) Visualizações principais (com inliers filtrados)
+    
 
-    # 4.1) Linhas + pontos (inliers apenas)
+    
     img_linhas = cv2.drawMatches(
         img_a_color, kp_a,
         img_b_color, kp_b,
@@ -282,7 +276,7 @@ def processar_comparacao(caminho_a, caminho_b):
         flags=cv2.DrawMatchesFlags_DEFAULT
     )
 
-    # 4.2) Apenas linhas
+   
     img_linhas_simples = cv2.drawMatches(
         img_a_color, kp_a,
         img_b_color, kp_b,
@@ -291,19 +285,17 @@ def processar_comparacao(caminho_a, caminho_b):
         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
     )
 
-    # 4.3) Canvas de pontos inliers (usando todos os inliers, não só os desenhados)
+    
     img_pontos = montar_canvas_pontos(img_a_color, img_b_color, kp_a, kp_b, matches_inliers)
 
-    # Salva tudo
+    
     salvar_resultados(img_linhas, img_linhas_simples, img_pontos, img_a_kp, img_b_kp)
 
-    # imagem exibida na interface
+  
     return img_linhas
 
 
-# ==============================
-#   INTERFACE GRÁFICA (TKINTER)
-# ==============================
+
 
 img_a = ""
 img_b = ""
@@ -347,7 +339,7 @@ def executar():
 
     lbl_status.config(text="Concluído! Resultados salvos na pasta 'resultados'.", fg="#3ba55d")
 
-    # Redimensionar a imagem de saída para caber na janela
+    
     largura_max = 1200
     altura_max = 700
     h, w = resultado.shape[:2]
@@ -370,7 +362,7 @@ def executar():
     lbl_out.image = tk_img
 
 
-# ============ CONFIG. JANELA ============
+
 
 root = tk.Tk()
 root.title("Comparador de Imagens - ORB + RANSAC (Lógica Alternativa)")
@@ -391,7 +383,7 @@ def on_leave(e):
     e.widget["background"] = COR_BTN
 
 
-# Topo: seleção de imagens
+
 frame_top = tk.Frame(root, bg=COR_BG, pady=10)
 frame_top.pack(fill=tk.X)
 
@@ -419,7 +411,7 @@ btn2.bind("<Leave>", on_leave)
 lbl_b = tk.Label(frame_top, text="Nenhuma imagem escolhida", fg="gray", bg=COR_BG, width=30, anchor="w")
 lbl_b.pack(side=tk.LEFT)
 
-# Botão principal
+
 frame_mid = tk.Frame(root, bg=COR_BG, pady=10)
 frame_mid.pack()
 
@@ -447,7 +439,7 @@ lbl_status = tk.Label(
 )
 lbl_status.pack(pady=5)
 
-# Área da imagem de saída
+
 frame_img = tk.Frame(root, bg=COR_CARD, borderwidth=1, relief=tk.SUNKEN)
 frame_img.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
